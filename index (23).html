@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>FitApp</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--tx)}
+button,input,textarea{font-family:'Outfit',sans-serif;outline:none;border:none;background:none}
+:root{
+  --bg:#f8fafc;--su:#fff;--s2:#f1f5f9;--bd:#e2e8f0;--b2:#cbd5e1;
+  --ac:#6366f1;--ab:#eef2ff;--tx:#0f172a;--t2:#475569;--t3:#94a3b8;
+  --ok:#10b981;--ob:#ecfdf5;--er:#ef4444;--eb:#fef2f2;--wn:#f59e0b;--wb:#fffbeb;
+  --sh:0 1px 3px #0000000d;--sm:0 4px 16px #0000001a;--ov:#00000066;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#080c14;--su:#0f1520;--s2:#1e2535;--bd:#2a3548;--b2:#334155;
+  --ac:#818cf8;--ab:#1e1b4b;--tx:#e2e8f0;--t2:#94a3b8;--t3:#475569;
+  --ok:#34d399;--ob:#052e16;--er:#f87171;--eb:#450a0a;--wn:#fbbf24;--wb:#1c1402;
+  --sh:0 1px 4px #00000055;--sm:0 4px 24px #00000077;--ov:#000000aa;
+}}
+@keyframes spin{0%{transform:rotate(-15deg)}50%{transform:rotate(15deg)}100%{transform:rotate(-15deg)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.botnav{position:fixed;bottom:0;left:0;right:0;background:var(--su);border-top:1px solid var(--bd);display:flex;z-index:200}
+@media(min-width:860px){
+  .botnav{display:none}
+  .sidebar{display:flex!important}
+  .main{height:100vh;overflow-y:auto}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+import{initializeApp}from'https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js';
+import{getDatabase,ref,onValue,set}from'https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js';
+
+const db=getDatabase(initializeApp({
+  apiKey:"AIzaSyAzUBF4J8qtZarmY3raagkgZw62i5AEWOo",
+  authDomain:"fitapp-6a61e.firebaseapp.com",
+  databaseURL:"https://fitapp-6a61e-default-rtdb.firebaseio.com",
+  projectId:"fitapp-6a61e",
+  storageBucket:"fitapp-6a61e.firebasestorage.app",
+  messagingSenderId:"893201513875",
+  appId:"1:893201513875:web:331c4b0f1256aa72c67c66"
+}));
+const fset=(p,v)=>set(ref(db,p),v);
+
+// ── CONSTANTES ──────────────────────────────────────────────────
+const GOAL=4, FINE=5;
+const DS=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+const PAL=['#6366f1','#10b981','#f59e0b','#ef4444','#06b6d4','#a855f7','#ec4899','#14b8a6','#f97316','#8b5cf6','#84cc16','#f43f5e','#0ea5e9','#d946ef','#22c55e','#eab308','#3b82f6','#64748b','#e11d48','#0891b2'];
+const clr=n=>{let h=0;for(let i=0;i<n.length;i++)h=(h*31+n.charCodeAt(i))>>>0;return PAL[h%PAL.length]};
+const dk=()=>matchMedia('(prefers-color-scheme:dark)').matches;
+const mon=(d=new Date())=>{const x=new Date(d);x.setHours(0,0,0,0);const day=x.getDay();x.setDate(x.getDate()+(day===0?-6:1-day));return x.toISOString().slice(0,10)};
+const wkDates=m=>{const s=new Date(m+'T00:00:00');return Array.from({length:7},(_,i)=>{const d=new Date(s);d.setDate(s.getDate()+i);return d.toISOString().slice(0,10)})};
+const money=v=>`R$ ${v.toFixed(2).replace('.',',')}`;
+const fdate=i=>new Date(i+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'});
+const ago=ts=>{const m=Math.floor((Date.now()-ts)/60000);if(m<1)return'agora';if(m<60)return m+'min';const h=Math.floor(m/60);if(h<24)return h+'h';return Math.floor(h/24)+'d'};
+const hclr=d=>{const dark=dk();if(!d)return dark?'#1e2535':'#f1f5f9';if(d===1)return dark?'#7f1d1d':'#fecdd3';if(d===2)return dark?'#78350f':'#fde68a';if(d===3)return dark?'#064e3b':'#6ee7b7';return'#10b981'};
+const dname=l=>l?l.split('.').map(p=>p[0].toUpperCase()+p.slice(1).toLowerCase()).join(' '):'';
+const fname=l=>l?l.split('.')[0][0].toUpperCase()+l.split('.')[0].slice(1).toLowerCase():'';
+const validL=s=>/^[a-zA-ZÀ-ÿ]+\.[a-zA-ZÀ-ÿ]+$/.test(s.trim());
+const toArr=v=>!v?[]:Array.isArray(v)?v:Object.values(v);
+const NOW=mon();
+
+// ── SESSÃO ──────────────────────────────────────────────────────
+const SK='fa3';
+const saveSess=u=>{try{u?localStorage.setItem(SK,JSON.stringify(u)):localStorage.removeItem(SK)}catch{}};
+const loadSess=()=>{try{const s=localStorage.getItem(SK);return s?JSON.parse(s):null}catch{return null}};
+
+// ── ESTADO ──────────────────────────────────────────────────────
+const D={
+  user:loadSess()||null,
+  view:'feed', week:NOW,
+  users:{}, pw:{}, photos:{}, workouts:{}, posts:[], fines:{},
+  modal:null, postDate:null, postImg:null, posting:false,
+  cmPost:null, cfData:null,
+  mode:'choose', // choose|login|register  (tela de login)
+  toast:null, ready:false,
+};
+
+// ── TOAST ────────────────────────────────────────────────────────
+let _tt;
+const toast=(msg,er)=>{clearTimeout(_tt);D.toast={msg,er};render();_tt=setTimeout(()=>{D.toast=null;render()},2800)};
+
+// ── GETTERS ──────────────────────────────────────────────────────
+const members=()=>Object.keys(D.users).sort();
+const days=(l,w)=>toArr(D.workouts[w]?.[l]).filter(d=>typeof d==='string');
+const trained=(l,w)=>days(l,w).length;
+const fine=(l,w)=>Math.max(0,GOAL-trained(l,w))*FINE;
+const paidFines=l=>Object.entries(D.fines).filter(([k,v])=>k.endsWith('_'+l)&&v)
+  .reduce((a,[k])=>{const w=k.slice(0,k.lastIndexOf('_'+l));return a+(fine(l,w)>0?fine(l,w):0)},0);
+const totalPaid=()=>members().reduce((a,m)=>a+paidFines(m),0);
+const totalDays=l=>Object.keys(D.workouts).reduce((a,w)=>a+trained(l,w),0);
+const activeWks=()=>[...new Set(Object.keys(D.workouts).filter(w=>Object.values(D.workouts[w]||{}).some(a=>toArr(a).length>0)))].sort();
+const dispWks=()=>[...new Set([...activeWks(),NOW])].sort();
+const myphoto=()=>D.photos[D.user?.login]||null;
+// Feed: posts da semana selecionada, de membros válidos
+const feedPosts=()=>{
+  const ms=new Set(members()), wd=new Set(wkDates(D.week));
+  return D.posts.filter(p=>wd.has(p.date)&&(ms.size===0||ms.has(p.member)));
+};
+// Todos os posts de membros válidos
+const validPosts=()=>{
+  const ms=new Set(members());
+  return D.posts.filter(p=>ms.size===0||ms.has(p.member));
+};
+
+// ── FUNÇÕES EXPOSTAS GLOBALMENTE (antes de qualquer listener) ────
+// Necessário para onclick inline no HTML gerado dentro de type="module"
+window.doLogin=doLogin;
+window.doRegister=doRegister;
+window._setMode=mode=>{D.mode=mode;render()};
+window._setModeLogin=()=>{D.mode='login';render()};
+window._setModeRegister=()=>{D.mode='register';render()};
+window._setModeChoose=()=>{D.mode='choose';render()};
+window._togglePw=()=>{const i=document.getElementById('inp-pw');if(i){i.type=i.type==='password'?'text':'password'}};
+window._enterRegister=e=>{if(e.key==='Enter')doRegister()};
+window._enterLogin=e=>{if(e.key==='Enter')doLogin()};
+
+// ── FIREBASE ────────────────────────────────────────────────────
+onValue(ref(db,'users'),s=>{
+  D.users=s.exists()?s.val():{};
+  if(D.user){
+    const n=Object.keys(D.users).length;
+    if(n>0&&!D.users[D.user.login]){saveSess(null);D.user=null;D.mode='choose';}
+    else if(D.users[D.user.login])D.user.mod=!!D.users[D.user.login].mod;
+  }
+  D.ready=true; render();
+});
+onValue(ref(db,'passwords'),s=>{D.pw=s.exists()?s.val():{};render()});
+onValue(ref(db,'photos'),s=>{D.photos=s.exists()?s.val():{};render()});
+onValue(ref(db,'finesPaid'),s=>{D.fines=s.exists()?s.val():{};render()});
+onValue(ref(db,'workouts'),s=>{
+  if(!s.exists()){D.workouts={};render();return;}
+  const raw=s.val(); D.workouts={};
+  Object.keys(raw).forEach(w=>{
+    D.workouts[w]={};
+    Object.keys(raw[w]||{}).forEach(l=>{
+      D.workouts[w][l]=toArr(raw[w][l]).filter(d=>typeof d==='string');
+    });
+  });
+  render();
+});
+onValue(ref(db,'posts'),s=>{
+  D.posts=s.exists()?Object.values(s.val()).sort((a,b)=>b.ts-a.ts):[];
+  D.ready=true; render();
+});
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change',render);
+setTimeout(()=>{if(!D.ready){D.ready=true;render()}},2000);
+
+// Auto-logout por inatividade
+let _it;
+const resetIt=()=>{clearTimeout(_it);if(!D.user)return;_it=setTimeout(()=>{saveSess(null);D.user=null;D.mode='choose';render();toast('Sessão encerrada por inatividade')},30*60*1000)};
+['click','touchstart','keydown'].forEach(e=>document.addEventListener(e,resetIt,{passive:true}));
+
+// ── COMPONENTES ─────────────────────────────────────────────────
+const av=(l,photo,sz=36)=>{const c=clr(l),i=(l||'?')[0].toUpperCase();return`<div style="width:${sz}px;height:${sz}px;border-radius:50%;overflow:hidden;flex-shrink:0;background:${photo?'transparent':c+'22'};border:2px solid ${c}44;display:flex;align-items:center;justify-content:center">${photo?`<img src="${photo}" style="width:100%;height:100%;object-fit:cover"/>`:`<span style="font-weight:700;font-size:${sz*.38}px;color:${c}">${i}</span>`}</div>`};
+const ring=(pct,sz=50,c)=>{const r=(sz-6)/2,ci=2*Math.PI*r;return`<svg width="${sz}" height="${sz}" style="transform:rotate(-90deg);flex-shrink:0"><circle cx="${sz/2}" cy="${sz/2}" r="${r}" fill="none" stroke="var(--bd)" stroke-width="5"/><circle cx="${sz/2}" cy="${sz/2}" r="${r}" fill="none" stroke="${c}" stroke-width="5" stroke-dasharray="${ci}" stroke-dashoffset="${ci*(1-Math.min(1,pct))}"/></svg>`};
+
+// ── RENDER PRINCIPAL ─────────────────────────────────────────────
+function render(){
+  const el=document.getElementById('app');
+  if(!el)return;
+  if(!D.ready){
+    el.innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg)"><div style="font-size:52px;animation:spin 1.5s infinite">🏋️</div></div>`;
+    return;
+  }
+  if(!D.user){
+    el.innerHTML=renderLogin();
+    return;
+  }
+  const toastHtml=D.toast?`<div style="position:fixed;top:16px;left:50%;transform:translateX(-50%);background:${D.toast.er?'var(--er)':'var(--ok)'};color:#fff;border-radius:12px;padding:10px 20px;font-weight:600;font-size:14px;z-index:999;white-space:nowrap;box-shadow:var(--sm)">${D.toast.msg}</div>`:'';
+  const TABS=[['feed','🏠','Feed'],['log','📅','Treinos'],['dashboard','📊','Dashboard'],['perfil','👤','Perfil'],['caixa','💰','Caixa']];
+  const isWkView=['feed','log'].includes(D.view);
+  const wd=wkDates(D.week), td=new Date().toISOString().slice(0,10), isNow=D.week===NOW;
+  const wkLabel=isNow?`<span style="color:var(--ac);font-weight:700">Esta semana</span>`:`${fdate(wd[0])} — ${fdate(wd[6])}`;
+
+  // Sidebar desktop
+  const sidebar=`<div class="sidebar" style="display:none;flex-direction:column;width:220px;flex-shrink:0;background:var(--su);border-right:1px solid var(--bd);position:sticky;top:0;height:100vh;padding:20px 12px;overflow-y:auto">
+    <div style="font-weight:700;font-size:18px;color:var(--ac);margin-bottom:20px">💪 FitApp</div>
+    <div style="background:var(--s2);border-radius:12px;padding:10px;margin-bottom:16px;border:1px solid var(--bd)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div onclick="document.getElementById('pfInp').click()" style="cursor:pointer;position:relative">
+          ${av(D.user.login,myphoto(),34)}
+          <div style="position:absolute;bottom:0;right:0;width:13px;height:13px;background:var(--ac);border-radius:50%;border:2px solid var(--s2);font-size:7px;color:#fff;display:flex;align-items:center;justify-content:center">+</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:12px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${D.user.name}</div>
+          <div style="font-size:10px;color:${D.user.mod?'var(--wn)':'var(--t3)'}">${D.user.mod?'⭐ Moderador':totalDays(D.user.login)+' treinos'}</div>
+        </div>
+      </div>
+      <button onclick="doLogout()" style="width:100%;background:var(--bd);color:var(--t2);border-radius:7px;padding:5px;font-size:11px;font-weight:600;cursor:pointer">Sair</button>
+    </div>
+    <nav style="flex:1;display:flex;flex-direction:column;gap:2px">
+      ${TABS.map(([id,ic,lb])=>`<button onclick="goView('${id}')" style="display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:${D.view===id?600:500};font-size:12px;text-align:left;background:${D.view===id?'var(--ab)':'transparent'};color:${D.view===id?'var(--ac)':'var(--t2)'}"><span>${ic}</span>${lb}</button>`).join('')}
+    </nav>
+    ${isWkView?`<div style="margin-top:16px;border-top:1px solid var(--bd);padding-top:14px">
+      <div style="font-size:9px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">Semana</div>
+      <div style="display:flex;align-items:center;gap:4px;background:var(--s2);border-radius:8px;padding:5px 8px;border:1px solid var(--bd)">
+        <button onclick="prevWk()" style="color:var(--t3);cursor:pointer;font-size:14px;padding:0 3px">‹</button>
+        <div style="flex:1;text-align:center;font-size:10px;font-weight:600;color:var(--t2)">${wkLabel}</div>
+        <button onclick="nextWk()" style="color:${isNow?'var(--bd)':'var(--t3)'};cursor:${isNow?'default':'pointer'};font-size:14px;padding:0 3px" ${isNow?'disabled':''}>›</button>
+      </div>
+    </div>`:''}
+  </div>`;
+
+  // Topbar mobile
+  const topbar=`<div style="position:sticky;top:0;z-index:50;background:var(--su);border-bottom:1px solid var(--bd);padding:8px 14px ${isWkView?'':'8px'}">
+    <div style="display:flex;justify-content:space-between;align-items:center${isWkView?';margin-bottom:7px':''}">
+      <div style="font-weight:700;font-size:17px;color:var(--ac)">💪 FitApp</div>
+      <div style="display:flex;align-items:center;gap:6px;background:var(--s2);border:1px solid var(--bd);border-radius:9px;padding:4px 8px">
+        <div onclick="document.getElementById('pfInp').click()" style="cursor:pointer">${av(D.user.login,myphoto(),22)}</div>
+        <span style="font-size:12px;font-weight:600;color:var(--tx)">${fname(D.user.login)}</span>
+        ${D.user.mod?`<span style="font-size:10px;color:var(--wn)">⭐</span>`:''}
+        <button onclick="doLogout()" style="font-size:11px;color:var(--t3);cursor:pointer;padding:0 2px">sair</button>
+      </div>
+    </div>
+    ${isWkView?`<div style="display:flex;align-items:center;gap:6px;background:var(--s2);border-radius:9px;padding:5px 9px;border:1px solid var(--bd)">
+      <button onclick="prevWk()" style="color:var(--t3);cursor:pointer;font-size:15px">‹</button>
+      <div style="flex:1;text-align:center;font-size:11px;font-weight:600;color:var(--t2)">${wkLabel}</div>
+      <button onclick="nextWk()" style="color:${isNow?'var(--bd)':'var(--t3)'};cursor:${isNow?'default':'pointer'};font-size:15px" ${isNow?'disabled':''}>›</button>
+    </div>`:''}
+  </div>`;
+
+  // Bottom nav mobile
+  const botnav=`<div class="botnav">${TABS.map(([id,ic,lb])=>`<button onclick="goView('${id}')" style="flex:1;cursor:pointer;padding:7px 0;color:${D.view===id?'var(--ac)':'var(--t3)'};border-top:2px solid ${D.view===id?'var(--ac)':'transparent'}"><div style="font-size:17px">${ic}</div><div style="font-size:9px;font-weight:600;margin-top:1px">${lb}</div></button>`).join('')}</div>`;
+
+  // Conteúdo
+  let body='';
+  if(D.view==='feed')body=renderFeed(feedPosts(),wd,td,isNow);
+  else if(D.view==='log')body=renderLog(validPosts(),wd,td,isNow);
+  else if(D.view==='dashboard')body=renderDash();
+  else if(D.view==='perfil')body=renderPerfil();
+  else if(D.view==='caixa')body=renderCaixa();
+
+  el.innerHTML=`${toastHtml}
+    <input id="pfInp" type="file" accept="image/*" style="display:none" onchange="onPfChange(this)"/>
+    <div style="display:flex;min-height:100vh">
+      ${sidebar}
+      <div class="main" style="flex:1;max-width:560px;padding-bottom:80px">
+        ${topbar}
+        ${body}
+      </div>
+    </div>
+    ${botnav}
+    ${renderModal()}`;
+}
+
+// ── FEED ─────────────────────────────────────────────────────────
+function renderFeed(posts,wd,td,isNow){
+  const ms=members();
+  const top=[...ms].map(m=>({m,n:trained(m,D.week)})).sort((a,b)=>b.n-a.n||a.m.localeCompare(b.m)).slice(0,5);
+  const cards=top.map(({m,n})=>{const c=clr(m),isMe=m===D.user.login,pct=Math.min(1,n/GOAL);
+    return`<button onclick="${isMe?"goView('log')":''}" style="flex-shrink:0;text-align:center;min-width:74px;background:var(--su);border:1.5px solid ${isMe?c:'var(--bd)'};border-radius:12px;padding:9px 7px;cursor:${isMe?'pointer':'default'};box-shadow:${isMe?`0 0 0 3px ${c}18`:'var(--sh)'}">
+      <div style="position:relative;display:inline-flex;align-items:center;justify-content:center">${ring(pct,46,c)}<div style="position:absolute">${av(m,D.photos[m],29)}</div></div>
+      <div style="font-size:10px;font-weight:600;color:${isMe?c:'var(--t2)'};margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:68px">${fname(m)}</div>
+      <div style="font-size:10px;color:${pct>=1?'var(--ok)':'var(--t3)'}">${n}/${GOAL}${n>GOAL?` <span style="color:var(--ac);font-size:8px">+${n-GOAL}</span>`:''}</div>
+    </button>`}).join('');
+
+  const empty=isNow
+    ?`<div style="text-align:center;padding:44px 0;color:var(--t3)"><div style="font-size:42px">🏋️</div><div style="font-size:14px;font-weight:600;color:var(--t2);margin-top:10px">Nenhum treino esta semana</div><div style="font-size:12px;margin-top:4px">Registre na aba 📅 Treinos!</div></div>`
+    :`<div style="text-align:center;padding:44px 0;color:var(--t3)"><div style="font-size:42px">📅</div><div style="font-size:14px;font-weight:600;color:var(--t2);margin-top:10px">Nenhum treino nessa semana</div></div>`;
+
+  const postsHtml=posts.length?posts.map(p=>{
+    const lks=p.likes?Object.keys(p.likes):[], cms=p.comments?Object.values(p.comments).sort((a,b)=>a.ts-b.ts):[], liked=lks.includes(D.user.login);
+    return`<div style="background:var(--su);border:1px solid var(--bd);border-radius:15px;margin-bottom:11px;overflow:hidden;box-shadow:var(--sh);animation:fadeUp .25s ease">
+      <div style="display:flex;align-items:center;gap:8px;padding:11px 12px 7px">
+        ${av(p.member,D.photos[p.member],36)}
+        <div style="flex:1"><div style="font-weight:600;font-size:14px;color:var(--tx)">${dname(p.member)}</div><div style="font-size:11px;color:var(--t3)">${ago(p.ts)} atrás</div></div>
+        <div style="font-size:10px;color:var(--t3);background:var(--s2);border-radius:6px;padding:2px 6px;border:1px solid var(--bd)">${new Date(p.date+'T00:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'})}</div>
+      </div>
+      ${p.image?`<img src="${p.image}" style="width:100%;max-height:300px;object-fit:cover"/>`:''}
+      <div style="padding:9px 12px">
+        <div style="font-weight:600;font-size:14px;color:var(--tx);margin-bottom:${p.note?2:0}px">💪 ${p.title}</div>
+        ${p.note?`<div style="font-size:12px;color:var(--t2);line-height:1.5">${p.note}</div>`:''}
+      </div>
+      <div style="padding:5px 12px 9px;display:flex;gap:12px;align-items:center;border-top:1px solid var(--bd)">
+        <button onclick="doLike(${p.id})" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${liked?'var(--er)':'var(--t3)'};font-weight:600;font-size:12px">${liked?'❤️':'🤍'}${lks.length?` ${lks.length}`:''}</button>
+        <button onclick="openCmt(${p.id})" style="cursor:pointer;color:var(--t3);font-weight:600;font-size:12px">💬${cms.length?` ${cms.length}`:''}</button>
+        ${lks.length?`<div style="margin-left:auto;font-size:10px;color:var(--t3)">${lks.map(l=>fname(l)).slice(0,2).join(', ')}${lks.length>2?` +${lks.length-2}`:''}</div>`:''}
+      </div>
+      ${cms.length?`<div style="padding:0 12px 9px">${cms.slice(-2).map(c=>`<div style="display:flex;gap:6px;margin-top:5px">${av(c.author,D.photos[c.author],22)}<div style="background:var(--s2);border-radius:8px;padding:5px 9px;flex:1;border:1px solid var(--bd);font-size:11px"><span style="font-weight:600;color:${clr(c.author)}">${fname(c.author)}</span> <span style="color:var(--t2)">${c.text}</span></div></div>`).join('')}${cms.length>2?`<button onclick="openCmt(${p.id})" style="color:var(--t3);font-size:10px;cursor:pointer;margin-top:3px">Ver todos os ${cms.length} comentários</button>`:''}</div>`:''}
+    </div>`}).join(''):empty;
+
+  return`<div style="padding:10px 13px">
+    ${ms.length?`<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:2px">${cards}</div>${ms.length>5?`<div style="font-size:10px;color:var(--t3);text-align:center;margin-bottom:6px">Top 5 · ${ms.length} membros</div>`:''}`:``}
+    <div style="background:var(--ab);border:1px solid var(--ac)22;border-radius:10px;padding:7px 11px;margin-bottom:11px;display:flex;gap:7px;align-items:center">
+      <span style="font-size:15px">💡</span><span style="font-size:12px;color:var(--t2)">Registre treinos em <strong style="color:var(--ac)">📅 Treinos</strong> com foto.</span>
+    </div>
+    ${postsHtml}
+  </div>`;
+}
+
+// ── TREINOS ──────────────────────────────────────────────────────
+function renderLog(posts,wd,td,isNow){
+  const l=D.user.login, mydays=days(l,D.week), cnt=mydays.length, c=clr(l);
+  const pct=Math.min(1,cnt/GOAL), f=fine(l,D.week);
+  const cells=wd.map((date,i)=>{
+    const chk=mydays.includes(date), fut=date>td, can=isNow&&!chk&&!fut;
+    const dp=posts.find(p=>p.member===l&&p.date===date);
+    const inner=chk&&dp?.image?`<img src="${dp.image}" style="width:100%;height:100%;object-fit:cover"/>`:chk?`<span style="color:${c};font-weight:700;font-size:12px">✓</span>`:can?`<span style="font-size:11px;opacity:.2">📷</span>`:'';
+    return`<div style="text-align:center">
+      <div style="font-size:8px;color:var(--t3);margin-bottom:3px;font-weight:600">${DS[i]}</div>
+      <button ${!can?'disabled':''} onclick="${can?`openPost('${date}')`:''}" style="width:100%;aspect-ratio:1/1;border-radius:8px;border:1.5px solid ${chk?c:date===td&&isNow?c+'55':'var(--bd)'};background:${chk?c+'12':date===td&&isNow?c+'05':'var(--s2)'};cursor:${can?'pointer':'default'};opacity:${fut?.3:1};display:flex;align-items:center;justify-content:center;overflow:hidden;padding:0">${inner}</button>
+      <div style="font-size:8px;color:var(--t3);margin-top:2px">${new Date(date+'T00:00:00').getDate()}</div>
+    </div>`;}).join('');
+  return`<div style="padding:10px 13px">
+    <div style="background:${isNow?'var(--ab)':'var(--s2)'};border:1px solid ${isNow?'var(--ac)22':'var(--bd)'};border-radius:10px;padding:7px 11px;margin-bottom:11px;font-size:12px;color:var(--t2)">${isNow?'📸 Toque num dia para registrar. Dias extras contam!':'📅 Semana passada — registros só na semana atual.'}</div>
+    <div style="background:var(--su);border-radius:14px;padding:12px;margin-bottom:11px;border:1px solid var(--bd);box-shadow:var(--sh)">
+      <div style="font-size:9px;color:var(--t3);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Dias desta semana</div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">${cells}</div>
+    </div>
+    <div style="background:var(--su);border-radius:14px;padding:12px;border:1px solid var(--bd);box-shadow:var(--sh);display:flex;align-items:center;gap:12px">
+      ${ring(pct,54,c)}
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:15px;color:var(--tx)">${cnt} dia${cnt!==1?'s':''} ${isNow?'esta':'nessa'} semana</div>
+        <div style="font-size:12px;color:var(--t2);margin-top:2px">${cnt>=GOAL?`🎉 Meta batida${cnt>GOAL?` · +${cnt-GOAL} bônus!`:''}`:`${isNow?`Faltam ${GOAL-cnt} dias`:'Meta não batida'}`}</div>
+        ${f>0?`<div style="font-size:11px;color:var(--er);font-weight:600;margin-top:3px">${isNow?'Multa potencial':'Multa'}: ${money(f)}</div>`:''}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── DASHBOARD ────────────────────────────────────────────────────
+function renderDash(){
+  const ms=members();
+  if(!ms.length)return`<div style="padding:32px;text-align:center;color:var(--t3)"><div style="font-size:44px;margin-bottom:10px">📊</div><div style="font-size:13px;color:var(--t2);font-weight:600">Sem membros ainda</div></div>`;
+  const wks=dispWks();
+  const grp=wks.map(w=>ms.reduce((a,m)=>a+trained(m,w),0));
+  const maxG=Math.max(...grp,1);
+  const rank=[...ms].map(m=>({m,v:totalDays(m)})).sort((a,b)=>b.v-a.v||a.m.localeCompare(b.m));
+  const maxR=Math.max(...rank.map(d=>d.v),1);
+  const fdata=ms.map(m=>({m,v:paidFines(m)})).filter(d=>d.v>0).sort((a,b)=>b.v-a.v);
+  const maxF=Math.max(...fdata.map(d=>d.v),.01);
+  let acc=0;
+  const caixa=wks.map(w=>{acc+=ms.reduce((a,m)=>a+(D.fines[`${w}_${m}`]?fine(m,w):0),0);return acc});
+  const maxC=Math.max(...caixa,.01);
+  const totalG=ms.reduce((a,m)=>a+totalDays(m),0);
+  const avg=wks.length?(grp.reduce((a,b)=>a+b,0)/wks.length).toFixed(1):'0';
+  const best=Math.max(...grp,0);
+  const card=(ic,lb,v,sub,c)=>`<div style="background:var(--su);border:1px solid var(--bd);border-radius:12px;padding:11px;box-shadow:var(--sh)">
+    <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px"><span style="font-size:14px">${ic}</span><span style="font-size:9px;color:var(--t3);font-weight:600;text-transform:uppercase">${lb}</span></div>
+    <div style="font-weight:700;font-size:19px;color:${c}">${v}</div>
+    <div style="font-size:10px;color:var(--t3)">${sub}</div>
+  </div>`;
+  const bH=(m,v,max,i)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+    <div style="width:18px;font-size:10px;font-weight:700;color:${i<3?['#f59e0b','#94a3b8','#cd7c54'][i]:'var(--t3)'};text-align:right">${['🥇','🥈','🥉'][i]||i+1}</div>
+    <div style="width:58px;font-size:10px;font-weight:600;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fname(m)}</div>
+    <div style="flex:1;height:18px;background:var(--s2);border-radius:4px;overflow:hidden">
+      <div style="height:100%;width:${(v/max)*100}%;background:${clr(m)};border-radius:4px;display:flex;align-items:center;justify-content:flex-end;padding-right:4px">
+        ${v>0?`<span style="font-size:9px;font-weight:600;color:#fff">${v}</span>`:''}
+      </div>
+    </div>
+  </div>`;
+  const W=280,H=85,P=10;
+  const lpts=caixa.map((v,i)=>({x:P+(i/(Math.max(caixa.length-1,1)))*(W-P*2),y:H-P-(v/maxC)*(H-P*2),v}));
+  const ld=lpts.map((p,i)=>`${i===0?'M':'L'} ${p.x} ${p.y}`).join(' ');
+  const ad=`${ld} L ${lpts[lpts.length-1].x} ${H-P} L ${lpts[0].x} ${H-P} Z`;
+  return`<div style="padding:10px 13px">
+    <div style="font-weight:700;font-size:17px;color:var(--tx);margin-bottom:12px">📊 Dashboard</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:12px">
+      ${card('🏋️','Treinos',totalG,'total do grupo',clr(ms[0]))}
+      ${card('💰','Caixa',money(totalPaid()),'arrecadado','var(--wn)')}
+      ${card('📅','Média',avg,'treinos/sem','var(--ok)')}
+      ${card('🔥','Melhor',best,'treinos/sem','var(--er)')}
+    </div>
+    <div style="background:var(--su);border:1px solid var(--bd);border-radius:14px;padding:13px;margin-bottom:12px;box-shadow:var(--sh)">
+      <div style="font-weight:600;font-size:13px;color:var(--tx);margin-bottom:10px">🏆 Ranking</div>
+      ${rank.map((d,i)=>bH(d.m,d.v,maxR,i)).join('')}
+    </div>
+    ${grp.some(v=>v>0)?`<div style="background:var(--su);border:1px solid var(--bd);border-radius:14px;padding:13px;margin-bottom:12px;box-shadow:var(--sh)">
+      <div style="font-weight:600;font-size:13px;color:var(--tx);margin-bottom:10px">📅 Engajamento Semanal</div>
+      <div style="display:flex;gap:2px;align-items:flex-end">
+        ${wks.map((w,i)=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px">
+          <div style="font-size:7px;color:var(--t2);font-weight:600">${grp[i]||''}</div>
+          <div style="width:100%;height:${Math.max(3,(grp[i]/maxG)*80)}px;background:var(--ac);border-radius:2px 2px 0 0"></div>
+          <div style="font-size:6px;color:var(--t3)">${fdate(w)}</div>
+        </div>`).join('')}
+      </div>
+    </div>`:''}
+    <div style="background:var(--su);border:1px solid var(--bd);border-radius:14px;padding:13px;margin-bottom:12px;box-shadow:var(--sh)">
+      <div style="font-weight:600;font-size:13px;color:var(--tx);margin-bottom:10px">📈 Evolução do Caixa</div>
+      ${caixa.every(v=>v===0)?`<div style="text-align:center;padding:14px;color:var(--t3);font-size:12px">Nenhum pagamento ainda</div>`:`<svg width="100%" viewBox="0 0 ${W} ${H}" style="overflow:visible">
+        ${[0,.5,1].map(t=>`<line x1="${P}" x2="${W-P}" y1="${P+t*(H-P*2)}" y2="${P+t*(H-P*2)}" stroke="var(--bd)" stroke-width="1" stroke-dasharray="3,3"/>`).join('')}
+        <path d="${ad}" fill="var(--ac)18"/><path d="${ld}" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round"/>
+        ${lpts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3" fill="var(--ac)" stroke="var(--su)" stroke-width="2"/><text x="${p.x}" y="${p.y-6}" text-anchor="middle" fill="var(--ac)" font-size="7" font-weight="600">${money(p.v)}</text>`).join('')}
+      </svg>`}
+    </div>
+    ${fdata.length?`<div style="background:var(--su);border:1px solid var(--bd);border-radius:14px;padding:13px;box-shadow:var(--sh)">
+      <div style="font-weight:600;font-size:13px;color:var(--tx);margin-bottom:10px">💸 Contribuição</div>
+      <div style="overflow-x:auto"><div style="display:flex;gap:6px;align-items:flex-end;min-width:${fdata.length*48}px">
+        ${fdata.map(({m,v})=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+          <div style="font-size:9px;color:var(--t2);font-weight:600">${money(v)}</div>
+          <div style="width:100%;height:${Math.max(4,(v/maxF)*90)}px;background:${clr(m)};border-radius:3px 3px 0 0"></div>
+          <div style="font-size:9px;color:var(--t2);font-weight:600">${fname(m)}</div>
+        </div>`).join('')}
+      </div></div>
+    </div>`:''}
+  </div>`;
+}
+
+// ── PERFIL ───────────────────────────────────────────────────────
+function renderPerfil(){
+  const l=D.user.login, c=clr(l), ms=members(), wks=dispWks();
+  const myD=wks.map(w=>trained(l,w)), total=myD.reduce((a,b)=>a+b,0);
+  const metas=myD.filter(d=>d>=GOAL).length, taxa=wks.length?Math.round(metas/wks.length*100):0;
+  const avg=wks.length?(total/wks.length).toFixed(1):'0', fp=paidFines(l);
+  const tc=taxa>=75?'var(--ok)':taxa>=50?'var(--wn)':'var(--er)';
+  const rank=[...ms].map(m=>({m,v:totalDays(m)})).sort((a,b)=>b.v-a.v||a.m.localeCompare(b.m));
+  const pos=rank.findIndex(r=>r.m===l)+1, maxC=Math.max(...rank.map(r=>r.v),1);
+  const medal=['🥇','🥈','🥉'][pos-1]||`#${pos}`;
+  const grpA=wks.map(w=>{const vs=ms.map(m=>trained(m,w));return vs.length?+(vs.reduce((a,b)=>a+b,0)/vs.length).toFixed(1):0});
+  const maxL=Math.max(...myD,...grpA,1);
+  const W=260,H=80,P=8;
+  const pts=arr=>arr.map((v,i)=>({x:P+(i/(Math.max(arr.length-1,1)))*(W-P*2),y:H-P-(v/maxL)*(H-P*2),v}));
+  const mp=pts(myD),ap=pts(grpA);
+  const pd=p=>p.map((x,i)=>`${i===0?'M':'L'} ${x.x} ${x.y}`).join(' ');
+  const heat=`<div style="overflow-x:auto"><div style="min-width:240px">
+    <div style="display:flex;margin-bottom:2px">${wks.map((w,i)=>`<div style="flex:1;text-align:center;font-size:6px;color:${i%2===0?'var(--t3)':'transparent'}">${fdate(w)}</div>`).join('')}</div>
+    <div style="display:flex">${myD.map(d=>`<div style="flex:1;padding:1px;display:flex;justify-content:center"><div style="width:100%;aspect-ratio:1/1;background:${hclr(d)};border-radius:4px;border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600;color:${d>=3?'#fff':'var(--t2)'}">${d}</div></div>`).join('')}
+    </div>
+  </div></div>`;
+  return`<div style="padding:10px 13px">
+    <div style="background:linear-gradient(135deg,${c}08,var(--su));border:1px solid ${c}33;border-radius:14px;padding:12px;margin-bottom:12px;box-shadow:var(--sh)">
+      <div style="display:flex;align-items:center;gap:10px">
+        ${av(l,myphoto(),46)}
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:16px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${D.user.name}</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:1px">${total} treinos registrados</div>
+        </div>
+        <div style="text-align:center"><div style="font-size:22px">${medal}</div><div style="font-size:9px;color:var(--t3)">de ${ms.length}</div></div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:12px">
+      <div style="background:var(--su);border:1px solid var(--bd);border-radius:12px;padding:11px;box-shadow:var(--sh)"><div style="font-size:9px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:3px">🏋️ Total</div><div style="font-weight:700;font-size:20px;color:${c}">${total}</div><div style="font-size:10px;color:var(--t3)">${wks.length} semanas</div></div>
+      <div style="background:var(--su);border:1px solid var(--bd);border-radius:12px;padding:11px;box-shadow:var(--sh)"><div style="font-size:9px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:3px">🎯 Meta</div><div style="font-weight:700;font-size:20px;color:${tc}">${taxa}%</div><div style="font-size:10px;color:var(--t3)">${metas}/${wks.length} semanas</div></div>
+      <div style="background:var(--su);border:1px solid var(--bd);border-radius:12px;padding:11px;box-shadow:var(--sh)"><div style="font-size:9px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:3px">📅 Média</div><div style="font-weight:700;font-size:20px;color:var(--ok)">${avg}</div><div style="font-size:10px;color:var(--t3)">dias/semana</div></div>
+      <div style="background:var(--su);border:1px solid var(--bd);border-radius:12px;padding:11px;box-shadow:var(--sh)"><div style="font-size:9px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:3px">💸 Multas</div><div style="font-weight:700;font-size:20px;color:${fp===0?'var(--ok)':'var(--er)'}">${money(fp)}</div><div style="font-size:10px;color:var(--t3)">pagas</div></div>
+    </div>
+    <div style="background:var(--su);border:1px solid var(--bd);border-radius:14px;padding:13px;margin-bottom:12px;box-shadow:var(--sh)">
+      <div style="font-weight:600;font-size:13px;color:var(--tx);margin-bottom:2px">📈 Evolução Semanal</div>
+      <div style="font-size:10px;color:var(--t3);margin-bottom:8px">Seus dias vs média do grupo</div>
+      ${wks.length<2?`<div style="text-align:center;padding:12px;color:var(--t3);font-size:12px">Registre 2+ semanas para ver</div>`:`<svg width="100%" viewBox="0 0 ${W} ${H}" style="overflow:visible">
+        ${[0,.5,1].map(t=>`<line x1="${P}" x2="${W-P}" y1="${P+t*(H-P*2)}" y2="${P+t*(H-P*2)}" stroke="var(--bd)" stroke-width="1" stroke-dasharray="3,3"/>`).join('')}
+        <path d="${pd(mp)} L ${mp[mp.length-1].x} ${H-P} L ${mp[0].x} ${H-P} Z" fill="${c}15"/>
+        <path d="${pd(ap)}" fill="none" stroke="var(--t3)" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <path d="${pd(mp)}" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round"/>
+        ${mp.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3" fill="${c}" stroke="var(--su)" stroke-width="2"/><text x="${p.x}" y="${p.y-5}" text-anchor="middle" fill="${c}" font-size="7" font-weight="600">${p.v}</text>`).join('')}
+      </svg>`}
+    </div>
+    <div style="background:var(--su);border:1px solid var(--bd);border-radius:14px;padding:13px;margin-bottom:12px;box-shadow:var(--sh)">
+      <div style="font-weight:600;font-size:13px;color:var(--tx);margin-bottom:10px">🗓 Heatmap</div>${heat}
+    </div>
+    <div style="background:var(--su);border:1px solid var(--bd);border-radius:14px;padding:13px;box-shadow:var(--sh)">
+      <div style="font-weight:600;font-size:13px;color:var(--tx);margin-bottom:10px">👥 Você vs Grupo</div>
+      ${rank.map((r,i)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+        <div style="width:18px;font-size:10px;font-weight:700;color:${i<3?['#f59e0b','#94a3b8','#cd7c54'][i]:'var(--t3)'};text-align:right">${['🥇','🥈','🥉'][i]||i+1}</div>
+        <div style="width:58px;font-size:10px;font-weight:600;color:${r.m===l?clr(l):'var(--t2)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fname(r.m)}</div>
+        <div style="flex:1;height:18px;background:var(--s2);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${(r.v/maxC)*100}%;background:${r.m===l?clr(l):'var(--t3)44'};border-radius:4px;display:flex;align-items:center;justify-content:flex-end;padding-right:4px">
+            ${r.v>0?`<span style="font-size:9px;font-weight:600;color:#fff">${r.v}</span>`:''}
+          </div>
+        </div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+// ── CAIXA ────────────────────────────────────────────────────────
+function renderCaixa(){
+  const ms=members(), wks=dispWks();
+  const modL=Object.keys(D.users).find(k=>D.users[k]?.mod);
+  const cards=ms.map(m=>{
+    const paid=paidFines(m), owed=Object.keys(D.workouts).reduce((a,w)=>a+fine(m,w),0), pend=owed-paid;
+    const wf=wks.filter(w=>fine(m,w)>0);
+    const rows=wf.map(w=>{const f=fine(m,w),k=`${w}_${m}`,ip=!!D.fines[k];
+      return`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 9px;border-radius:8px;margin-bottom:4px;background:${ip?'var(--ob)':'var(--eb)'};border:1px solid ${ip?'var(--ok)33':'var(--er)33'}">
+        <div><div style="font-size:11px;color:var(--t3)">${fdate(w)} — ${fdate(wkDates(w)[6])}</div><div style="font-weight:600;font-size:13px;color:${ip?'var(--ok)':'var(--er)'}">${money(f)}</div></div>
+        ${!ip?D.user.mod?`<button onclick="openConfirm('${m}','${w}',${f})" style="background:var(--wn);color:#fff;border-radius:7px;padding:5px 10px;font-weight:600;font-size:12px;cursor:pointer">Confirmar</button>`:`<span style="font-size:11px;color:var(--t3);font-style:italic">aguardando mod.</span>`:`<span style="font-size:17px">✅</span>`}
+      </div>`}).join('');
+    return`<div style="background:var(--su);border:1px solid var(--bd);border-radius:13px;padding:12px;margin-bottom:9px;box-shadow:var(--sh)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${wf.length?9:0}px">
+        ${av(m,D.photos[m],34)}
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:13px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${dname(m)}</div>
+          <div style="font-size:11px;color:var(--t3)">Pago: <span style="color:var(--ok);font-weight:600">${money(paid)}</span>${pend>0?` · <span style="color:var(--er);font-weight:600">${money(pend)} pendente</span>`:''}</div>
+        </div>
+      </div>
+      ${rows}${!wf.length?`<div style="font-size:12px;color:var(--t3)">Sem multas 🎉</div>`:''}
+    </div>`}).join('');
+  return`<div style="padding:10px 13px">
+    <div style="background:linear-gradient(135deg,var(--wn)12,var(--wn)04);border:1px solid var(--wn)33;border-radius:18px;padding:18px;text-align:center;margin-bottom:14px;box-shadow:var(--sh)">
+      <div style="font-size:36px">💰</div>
+      <div style="font-weight:700;font-size:17px;color:var(--tx);margin-top:6px">Saldo do Caixa</div>
+      <div style="font-weight:700;font-size:30px;color:var(--wn);margin-top:4px">${money(totalPaid())}</div>
+    </div>
+    <div style="background:${D.user.mod?'var(--wb)':'var(--s2)'};border-radius:12px;padding:9px 12px;margin-bottom:12px;display:flex;gap:8px;align-items:center;border:1px solid ${D.user.mod?'var(--wn)33':'var(--bd)'}">
+      <span>${D.user.mod?'⭐':'🔒'}</span>
+      <div style="font-size:12px;color:var(--t2)">${D.user.mod?'Você é o moderador — confirme os pagamentos abaixo.':`Fez o Pix? Avise ${modL?dname(modL):'o moderador'} para confirmar.`}</div>
+    </div>
+    ${cards||`<div style="text-align:center;padding:20px;color:var(--t3);font-size:12px">Nenhum membro cadastrado</div>`}
+  </div>`;
+}
+
+// ── LOGIN ────────────────────────────────────────────────────────
+function renderLogin(){
+  const n=Object.keys(D.users).length;
+  if(D.mode==='choose')return`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:24px">
+    <div style="width:100%;max-width:340px;text-align:center">
+      <div style="width:68px;height:68px;border-radius:50%;background:var(--ab);display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 10px">🏋️</div>
+      <div style="font-weight:700;font-size:22px;color:var(--tx);margin-bottom:4px">FitApp</div>
+      <div style="font-size:13px;color:var(--t2);margin-bottom:24px">Fitness com responsabilidade</div>
+      <button onclick="window._setModeLogin()" style="width:100%;background:var(--ac);color:#fff;border-radius:12px;padding:13px;font-weight:600;font-size:15px;cursor:pointer;margin-bottom:9px">Entrar</button>
+      <button onclick="window._setModeRegister()" style="width:100%;background:var(--su);color:var(--ac);border:2px solid var(--ac);border-radius:12px;padding:12px;font-weight:600;font-size:15px;cursor:pointer">Criar conta</button>
+      <div style="margin-top:12px;font-size:11px;color:var(--t3)">${n} membro${n!==1?'s':''} cadastrado${n!==1?'s':''}</div>
+    </div>
+  </div>`;
+
+  const isR=D.mode==='register', first=isR&&!n;
+  const sub=isR?'window.doRegister()':'window.doLogin()';
+  return`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:24px">
+    <div style="width:100%;max-width:340px">
+      <button onclick="window._setModeChoose()" style="color:var(--ac);font-size:13px;font-weight:600;cursor:pointer;margin-bottom:16px;padding:0">← Voltar</button>
+      <div style="font-weight:700;font-size:19px;color:var(--tx);margin-bottom:3px">${isR?'Criar conta':'Entrar'}</div>
+      <div style="font-size:13px;color:var(--t2);margin-bottom:18px">${isR?'Formato: <strong>nome.sobrenome</strong>':'Login e senha'}</div>
+      ${first?'<div style="background:var(--wb);border:1px solid var(--wn)44;border-radius:10px;padding:8px 11px;margin-bottom:12px;font-size:12px;color:var(--t2)">⭐ Você será o <strong>moderador</strong>!</div>':''}
+      <div style="background:var(--su);border:1px solid var(--bd);border-radius:18px;padding:20px;box-shadow:var(--sm)">
+        <div style="margin-bottom:10px">
+          <div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:5px;text-transform:uppercase;letter-spacing:1px">Login</div>
+          <input id="inp-login" placeholder="${isR?'ex: joao.silva':'nome.sobrenome'}" onkeydown="if(event.key==='Enter')${sub}" style="width:100%;background:var(--s2);border:1.5px solid var(--b2);border-radius:9px;padding:10px 12px;color:var(--tx);font-size:14px"/>
+          ${isR?'<div style="font-size:10px;color:var(--t3);margin-top:3px">Só letras, um ponto entre nome e sobrenome</div>':''}
+        </div>
+        <div style="margin-bottom:${isR?10:14}px">
+          <div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:5px;text-transform:uppercase;letter-spacing:1px">Senha</div>
+          <div style="position:relative">
+            <input id="inp-pw" type="password" placeholder="Mínimo 4 caracteres" onkeydown="if(event.key==='Enter')${sub}" style="width:100%;background:var(--s2);border:1.5px solid var(--b2);border-radius:9px;padding:10px 38px 10px 12px;color:var(--tx);font-size:14px"/>
+            <button onclick="window._togglePw()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--t3);cursor:pointer;font-size:16px">👁️</button>
+          </div>
+        </div>
+        ${isR?`<div style="margin-bottom:14px"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:5px;text-transform:uppercase;letter-spacing:1px">Confirmar senha</div><input id="inp-pw2" type="password" placeholder="Repita a senha" onkeydown="window._enterRegister(event)" style="width:100%;background:var(--s2);border:1.5px solid var(--b2);border-radius:9px;padding:10px 12px;color:var(--tx);font-size:14px"/></div>`:''}
+        <div id="login-err" style="display:none;color:var(--er);font-size:12px;font-weight:600;margin-bottom:9px;background:var(--eb);border:1px solid var(--er)33;border-radius:8px;padding:6px 10px"></div>
+        <button onclick="${sub}" style="width:100%;background:var(--ac);color:#fff;border-radius:10px;padding:12px;font-weight:600;font-size:14px;cursor:pointer">${isR?'Criar conta →':'Entrar →'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── MODAL ────────────────────────────────────────────────────────
+function renderModal(){
+  if(D.modal==='post'){
+    const c=clr(D.user.login), hasImg=!!D.postImg;
+    const dl=D.postDate?new Date(D.postDate+'T00:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'short'}):'';
+    return`<div onclick="if(event.target===this)closeModal()" style="position:fixed;inset:0;background:var(--ov);z-index:800;display:flex;align-items:flex-end;justify-content:center">
+      <div style="background:var(--su);border-radius:18px 18px 0 0;padding:18px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 -8px 32px #00000033">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          ${av(D.user.login,myphoto(),34)}
+          <div><div style="font-weight:600;font-size:14px;color:var(--tx)">Registrar Treino</div>${dl?`<div style="font-size:11px;color:var(--t3)">📅 ${dl}</div>`:''}</div>
+          <button onclick="closeModal()" style="margin-left:auto;color:var(--t3);font-size:19px;cursor:pointer;padding:4px">✕</button>
+        </div>
+        <div style="margin-bottom:10px">
+          <div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">Foto <span style="color:var(--er)">*</span></div>
+          ${hasImg
+            ?`<div style="position:relative"><img src="${D.postImg}" style="width:100%;border-radius:10px;max-height:190px;object-fit:cover"/><button onclick="D.postImg=null;render()" style="position:absolute;top:6px;right:6px;background:#000a;color:#fff;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px">✕</button></div>`
+            :`<button onclick="document.getElementById('postImgInp').click()" style="width:100%;background:var(--s2);border:2px dashed var(--er)44;border-radius:10px;padding:20px;color:var(--t3);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px"><span style="font-size:28px">📷</span><span style="font-size:13px;color:var(--t2);font-weight:600">Adicionar foto</span><span style="font-size:11px">Obrigatória</span></button>`}
+          <input id="postImgInp" type="file" accept="image/*" style="display:none" onchange="onPostImg(this)"/>
+        </div>
+        <input id="post-title" placeholder="Título (ex: Peito + Ombro 💪)" style="width:100%;background:var(--s2);border:1.5px solid var(--b2);border-radius:9px;padding:10px 12px;color:var(--tx);font-size:14px;margin-bottom:8px"/>
+        <textarea id="post-note" placeholder="Observações (opcional)" rows="2" style="width:100%;background:var(--s2);border:1.5px solid var(--b2);border-radius:9px;padding:10px 12px;color:var(--tx);font-size:13px;resize:none;margin-bottom:10px"></textarea>
+        <button onclick="submitPost()" ${D.posting?'disabled':''} style="width:100%;border-radius:10px;padding:12px;font-weight:600;font-size:14px;cursor:${D.posting?'not-allowed':'pointer'};background:${D.posting?'var(--bd)':hasImg?c:'var(--bd)'};color:${D.posting||!hasImg?'var(--t3)':'#fff'}">
+          ${D.posting?'Registrando...':hasImg?'Registrar treino ✓':'Adicione a foto para continuar'}
+        </button>
+      </div>
+    </div>`;
+  }
+  if(D.modal==='cmt'&&D.cmPost!==null){
+    const post=D.posts.find(p=>p.id===D.cmPost);
+    if(!post)return'';
+    const cms=post.comments?Object.values(post.comments).sort((a,b)=>a.ts-b.ts):[];
+    return`<div onclick="if(event.target===this)closeModal()" style="position:fixed;inset:0;background:var(--ov);z-index:800;display:flex;align-items:flex-end;justify-content:center">
+      <div style="background:var(--su);border-radius:18px 18px 0 0;padding:16px;width:100%;max-width:520px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 -8px 32px #00000033">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-weight:600;font-size:14px;color:var(--tx)">Comentários · ${cms.length}</div>
+          <button onclick="closeModal()" style="color:var(--t3);font-size:19px;cursor:pointer;padding:4px">✕</button>
+        </div>
+        <div id="cmt-list" style="overflow-y:auto;flex:1;margin-bottom:10px">${cms.length?cms.map(c=>`<div style="display:flex;gap:6px;margin-bottom:9px">${av(c.author,D.photos[c.author],24)}<div style="flex:1"><div style="background:var(--s2);border-radius:9px;padding:5px 9px;border:1px solid var(--bd);font-size:12px"><span style="font-weight:600;color:${clr(c.author)}">${fname(c.author)}</span> <span style="color:var(--t2)">${c.text}</span></div><div style="font-size:10px;color:var(--t3);margin-top:1px">${ago(c.ts)} atrás</div></div></div>`).join(''):`<div style="text-align:center;padding:18px;color:var(--t3);font-size:12px">Nenhum comentário ainda</div>`}</div>
+        <div style="display:flex;gap:7px">
+          <input id="cmt-inp" placeholder="Comentar..." style="flex:1;background:var(--s2);border:1.5px solid var(--b2);border-radius:9px;padding:9px 11px;color:var(--tx);font-size:13px"/>
+          <button onclick="submitCmt(${post.id})" style="background:var(--ac);color:#fff;border-radius:9px;padding:0 13px;font-weight:600;cursor:pointer;font-size:16px;flex-shrink:0">↑</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  if(D.modal==='confirm'&&D.cfData){
+    const{m,w,f}=D.cfData;
+    return`<div onclick="if(event.target===this)closeModal()" style="position:fixed;inset:0;background:var(--ov);display:flex;align-items:center;justify-content:center;z-index:800">
+      <div style="background:var(--su);border-radius:18px;padding:22px;max-width:280px;width:90%;text-align:center;box-shadow:var(--sm)">
+        <div style="font-size:36px">💸</div>
+        <div style="font-weight:700;font-size:16px;color:var(--tx);margin-top:6px">Confirmar Recebimento</div>
+        <div style="color:var(--t2);margin-top:6px;font-size:13px">${dname(m)}<br/><span style="color:var(--wn);font-weight:700;font-size:19px">${money(f)}</span></div>
+        <div style="display:flex;gap:7px;margin-top:14px">
+          <button onclick="closeModal()" style="flex:1;background:var(--s2);color:var(--t2);border:1px solid var(--bd);border-radius:9px;padding:9px;font-weight:600;cursor:pointer;font-size:13px">Cancelar</button>
+          <button onclick="confirmPay()" style="flex:1;background:var(--wn);color:#fff;border-radius:9px;padding:9px;font-weight:600;cursor:pointer;font-size:13px">Confirmar ✓</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  return'';
+}
+
+// ── HANDLERS GLOBAIS ─────────────────────────────────────────────
+window.goView=v=>{D.view=v;render()};
+window.prevWk=()=>{const d=new Date(D.week+'T00:00:00');d.setDate(d.getDate()-7);D.week=mon(d);render()};
+window.nextWk=()=>{const d=new Date(D.week+'T00:00:00');d.setDate(d.getDate()+7);const n=mon(d);if(n<=NOW){D.week=n;render()}};
+window.doLogout=()=>{if(confirm('Sair da conta?')){saveSess(null);D.user=null;D.mode='choose';render()}};
+window.openPost=date=>{const w=mon(new Date(date+'T00:00:00'));if(days(D.user.login,w).includes(date))return;D.postDate=date;D.postImg=null;D.modal='post';render()};
+window.closeModal=()=>{D.modal=null;D.cmPost=null;D.cfData=null;D.posting=false;D.postImg=null;render()};
+window.openCmt=id=>{D.cmPost=id;D.modal='cmt';render()};
+window.openConfirm=(m,w,f)=>{D.cfData={m,w,f};D.modal='confirm';render()};
+window.onPfChange=inp=>{const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=async e=>{await fset(`photos/${D.user.login}`,e.target.result);toast('Foto atualizada! 📸')};r.readAsDataURL(f)};
+window.onPostImg=inp=>{const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{D.postImg=e.target.result;render()};r.readAsDataURL(f)};
+
+function doLogin(){
+  const l=(document.getElementById('inp-login')?.value||'').trim().toLowerCase();
+  const pw=document.getElementById('inp-pw')?.value||'';
+  const err=document.getElementById('login-err');
+  const show=msg=>{if(err){err.style.display='block';err.textContent=msg}};
+  if(err)err.style.display='none';
+  if(!l)return show('⚠ Digite seu login.');
+  if(!D.users[l])return show('⚠ Login não encontrado.');
+  if(pw!==D.pw[l])return show('⚠ Senha incorreta.');
+  const u={login:l,name:dname(l),mod:!!D.users[l]?.mod};
+  saveSess(u);D.user=u;resetIt();render();
+}
+
+async function doRegister(){
+  const l=(document.getElementById('inp-login')?.value||'').trim().toLowerCase();
+  const pw=document.getElementById('inp-pw')?.value||'';
+  const pw2=document.getElementById('inp-pw2')?.value||'';
+  const err=document.getElementById('login-err');
+  const show=msg=>{if(err){err.style.display='block';err.textContent=msg}};
+  if(err)err.style.display='none';
+  if(!l||!validL(l))return show('⚠ Formato: nome.sobrenome (só letras).');
+  if(D.users[l])return show('⚠ Login já em uso.');
+  if(pw.length<4)return show('⚠ Mínimo 4 caracteres.');
+  if(pw!==pw2)return show('⚠ Senhas não coincidem.');
+  const isMod=!Object.keys(D.users).length;
+  await fset(`users/${l}`,{name:dname(l),mod:isMod,createdAt:Date.now()});
+  await fset(`passwords/${l}`,pw);
+  const u={login:l,name:dname(l),mod:isMod};
+  saveSess(u);D.user=u;resetIt();render();
+  toast(`Bem-vindo, ${dname(l)}! 🎉`);
+}
+
+window.submitPost=async()=>{
+  if(D.posting)return;
+  const title=(document.getElementById('post-title')?.value||'').trim();
+  const note=document.getElementById('post-note')?.value||'';
+  if(!title)return toast('Adicione um título!',true);
+  if(!D.postImg)return toast('Foto obrigatória!',true);
+  D.posting=true;render();
+  const date=D.postDate, week=mon(new Date(date+'T00:00:00'));
+  const prev=days(D.user.login,week);
+  if(!prev.includes(date)){
+    const upd=[...prev,date];
+    if(!D.workouts[week])D.workouts[week]={};
+    D.workouts[week][D.user.login]=upd;
+    await fset(`workouts/${week}/${D.user.login}`,upd);
+  }
+  const id=Date.now();
+  await fset(`posts/${id}`,{id,member:D.user.login,date,title,note,image:D.postImg,ts:id,likes:{},comments:{}});
+  D.week=week;D.modal=null;D.postImg=null;D.postDate=null;D.posting=false;D.view='log';render();
+  toast('Treino registrado! 💪');
+};
+
+window.doLike=async id=>{
+  const p=D.posts.find(x=>x.id===id);if(!p)return;
+  const lk=p.likes||{},m=D.user.login;
+  if(lk[m]){const{[m]:_,...r}=lk;await fset(`posts/${id}/likes`,Object.keys(r).length?r:null)}
+  else await fset(`posts/${id}/likes`,{...lk,[m]:true});
+};
+
+window.submitCmt=async id=>{
+  const inp=document.getElementById('cmt-inp');
+  const t=(inp?.value||'').trim();if(!t)return;
+  const ts=Date.now(),c={author:D.user.login,text:t,ts};
+  D.posts=D.posts.map(p=>{if(p.id!==id)return p;return{...p,comments:{...(p.comments||{}),[ts]:c}}});
+  if(inp){inp.value='';inp.focus()}
+  await fset(`posts/${id}/comments/${ts}`,c);
+  const list=document.getElementById('cmt-list');
+  if(list){
+    const post=D.posts.find(p=>p.id===id);
+    if(post){
+      const cms=Object.values(post.comments||{}).sort((a,b)=>a.ts-b.ts);
+      list.innerHTML=cms.map(c=>`<div style="display:flex;gap:6px;margin-bottom:9px">${av(c.author,D.photos[c.author],24)}<div style="flex:1"><div style="background:var(--s2);border-radius:9px;padding:5px 9px;border:1px solid var(--bd);font-size:12px"><span style="font-weight:600;color:${clr(c.author)}">${fname(c.author)}</span> <span style="color:var(--t2)">${c.text}</span></div><div style="font-size:10px;color:var(--t3);margin-top:1px">${ago(c.ts)} atrás</div></div></div>`).join('');
+      list.scrollTop=list.scrollHeight;
+    }
+  }
+};
+
+window.confirmPay=async()=>{
+  const{m,w}=D.cfData;
+  await fset(`finesPaid/${w}_${m}`,true);
+  D.modal=null;D.cfData=null;render();
+  toast(`Pagamento de ${dname(m)} confirmado! 💰`);
+};
+
+// Inicia
+render();
+</script>
+</body>
+</html>
