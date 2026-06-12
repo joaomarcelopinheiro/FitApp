@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FitApp — Limpar dados</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Outfit',sans-serif}
+body{background:#f8fafc;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:28px;max-width:380px;width:100%;box-shadow:0 4px 24px #0000001a;text-align:center}
+h1{font-size:20px;color:#0f172a;margin-bottom:6px}
+p{font-size:13px;color:#475569;line-height:1.5;margin-bottom:20px}
+button{width:100%;border:none;border-radius:11px;padding:13px;font-size:14px;font-weight:600;cursor:pointer}
+.danger{background:#ef4444;color:#fff}
+.danger:disabled{background:#cbd5e1;cursor:not-allowed}
+#log{margin-top:16px;font-size:13px;color:#475569;text-align:left;white-space:pre-line;min-height:20px}
+.ok{color:#10b981;font-weight:600}
+.err{color:#ef4444;font-weight:600}
+</style>
+</head>
+<body>
+<div class="card">
+  <div style="font-size:42px;margin-bottom:8px">🧹</div>
+  <h1>Limpar dados do FitApp</h1>
+  <p>Isso apaga <strong>todos</strong> os dados de teste (usuários, senhas, treinos, fotos e posts) do Firebase. Use só na fase de testes, antes de começar pra valer.</p>
+  <button id="btnClear" class="danger" onclick="limpar()">Apagar tudo</button>
+  <div id="log"></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyAzUBF4J8qtZarmY3raagkgZw62i5AEWOo",
+  authDomain:"fitapp-6a61e.firebaseapp.com",
+  databaseURL:"https://fitapp-6a61e-default-rtdb.firebaseio.com",
+  projectId:"fitapp-6a61e",
+  storageBucket:"fitapp-6a61e.firebasestorage.app",
+  messagingSenderId:"893201513875",
+  appId:"1:893201513875:web:331c4b0f1256aa72c67c66"
+});
+const db=firebase.database();
+const log=document.getElementById('log');
+
+window.limpar=async()=>{
+  if(!confirm('Tem certeza? Isso apaga TODOS os dados do FitApp e não tem como desfazer.'))return;
+  const btn=document.getElementById('btnClear');
+  btn.disabled=true; btn.textContent='Apagando...';
+  log.textContent='';
+  const paths=['users','passwords','photos','workouts','posts'];
+  try{
+    for(const p of paths){
+      await db.ref(p).remove();
+      log.innerHTML+=`<div class="ok">✓ ${p} apagado</div>`;
+    }
+    // limpa também a sessão salva no navegador
+    try{localStorage.removeItem('fitapp_session');}catch(e){}
+    log.innerHTML+=`<div class="ok" style="margin-top:8px">✅ Tudo limpo! Pode fechar esta aba e abrir o FitApp do zero.</div>`;
+    btn.textContent='Concluído';
+  }catch(e){
+    log.innerHTML+=`<div class="err">❌ Erro: ${e.message}</div>`;
+    btn.disabled=false; btn.textContent='Tentar de novo';
+  }
+};
+</script>
+</body>
+</html>
